@@ -3,4 +3,4 @@ desc: Open Notebook integration for AstrBot commands and LLM tools.
 help: 使用 /on ls 查看 Open Notebook notebooks。
 version: v0.1.0
 author: buding
-repo: https://github.com/buding/astrbot_plugin_open_notebook
+repo: https://github.com/zouyonghe/astrbot_plugin_open_notebook

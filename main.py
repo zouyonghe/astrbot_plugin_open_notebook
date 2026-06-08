@@ -95,11 +95,7 @@ class OpenNotebookPlugin(Star):
         yield event.plain_result(f"当前 notebook：{current['name']}\nID：{current['id']}")
 
     @on.command("upload")
-    async def upload_document(
-        self,
-        event: AstrMessageEvent,
-        title: GreedyStr = "",
-    ):
+    async def upload_document(self, event: AstrMessageEvent):
         """上传当前消息中的文件到当前 notebook。"""
         if denied := self._require_permission(event):
             yield event.plain_result(denied)
@@ -117,7 +113,7 @@ class OpenNotebookPlugin(Star):
             source = await self._client().upload_file(
                 current["id"],
                 file_path,
-                title=str(title or "") or None,
+                title=None,
                 embed=bool(self.config.get("embed_on_upload", True)),
                 async_processing=bool(self.config.get("async_processing", True)),
             )

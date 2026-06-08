@@ -34,7 +34,7 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 /on create <名称> [描述]
 /on use <notebook名称或ID>
 /on current
-/on upload [标题]
+/on upload
 /on ask <问题>
 /on delete <notebook名称或ID>
 ```
@@ -112,7 +112,7 @@ The command prefix is `/on`.
 /on create <name> [description]
 /on use <notebook name or id>
 /on current
-/on upload [title]
+/on upload
 /on ask <question>
 /on delete <notebook name or id>
 ```

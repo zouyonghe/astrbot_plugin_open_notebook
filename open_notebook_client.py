@@ -110,7 +110,8 @@ class OpenNotebookClient:
                 headers=self._headers(),
                 **kwargs,
             )
-            response.raise_for_status()
+            if response.is_error:
+                raise RuntimeError(self._error_message(response))
             if not response.content:
                 return {}
             return response.json()
@@ -122,6 +123,16 @@ class OpenNotebookClient:
         if not self.api_password:
             return {}
         return {"Authorization": f"Bearer {self.api_password}"}
+
+    @staticmethod
+    def _error_message(response: httpx.Response) -> str:
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and data.get("detail"):
+            return str(data["detail"])
+        return f"Open Notebook API error {response.status_code}: {response.text[:500]}"
 
     def _url(self, path: str, *, use_api_prefix: bool = True) -> str:
         clean_path = path if path.startswith("/") else f"/{path}"

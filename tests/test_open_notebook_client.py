@@ -88,6 +88,24 @@ class OpenNotebookClientTest(unittest.TestCase):
         self.assertIn(b"true", seen_body)
         self.assertIn(b'filename="paper.pdf"', seen_body)
 
+    def test_raises_open_notebook_error_detail(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                500,
+                json={"detail": "No model configured for default for type=chat."},
+            )
+
+        client = OpenNotebookClient(
+            "http://open-notebook.local",
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "No model configured for default for type=chat",
+        ):
+            asyncio.run(client.list_notebooks())
+
 
 if __name__ == "__main__":
     unittest.main()

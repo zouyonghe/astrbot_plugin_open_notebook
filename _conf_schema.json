@@ -1,0 +1,31 @@
+{
+  "base_url": {
+    "description": "Open Notebook API 地址",
+    "type": "string",
+    "hint": "例如 http://localhost:5055。插件会自动补齐 /api 路径。",
+    "default": "http://localhost:5055"
+  },
+  "api_password": {
+    "description": "Open Notebook API 密码",
+    "type": "string",
+    "hint": "如果 Open Notebook 配置了 OPEN_NOTEBOOK_PASSWORD，请填写该密码；未启用密码时留空。",
+    "default": ""
+  },
+  "admin_only": {
+    "description": "仅允许 AstrBot 管理员使用",
+    "type": "bool",
+    "hint": "开启后，命令和 LLM 工具都只允许管理员调用。",
+    "default": true
+  },
+  "embed_on_upload": {
+    "description": "上传后生成向量索引",
+    "type": "bool",
+    "default": true
+  },
+  "async_processing": {
+    "description": "异步处理上传文档",
+    "type": "bool",
+    "hint": "建议开启，避免大文件处理阻塞聊天响应。",
+    "default": true
+  }
+}

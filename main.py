@@ -292,7 +292,13 @@ class OpenNotebookPlugin(Star):
                 file_path = await component.get_file()
                 if file_path:
                     return Path(file_path)
-        raise ValueError("没有找到可上传的文件。请在同一条消息中附带文件后使用 /on upload。")
+            if isinstance(component, Comp.Reply) and component.chain:
+                for reply_component in component.chain:
+                    if isinstance(reply_component, Comp.File):
+                        file_path = await reply_component.get_file()
+                        if file_path:
+                            return Path(file_path)
+        raise ValueError("没有找到可上传的文件。请在同一条消息中附带或引用文件后使用 /on upload。")
 
     async def _ask_current(self, event: AstrMessageEvent, question: str) -> str:
         current = self._current_notebook(event)

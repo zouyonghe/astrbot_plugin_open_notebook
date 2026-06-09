@@ -15,7 +15,9 @@ class OpenNotebookClientTest(unittest.TestCase):
 
         async def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
-            return httpx.Response(200, json=[{"id": "notebook:abc", "name": "Research"}])
+            return httpx.Response(
+                200, json=[{"id": "notebook:abc", "name": "Research"}]
+            )
 
         client = OpenNotebookClient(
             "http://open-notebook.local/api/",
@@ -26,7 +28,9 @@ class OpenNotebookClientTest(unittest.TestCase):
         result = asyncio.run(client.list_notebooks())
 
         self.assertEqual(result[0]["id"], "notebook:abc")
-        self.assertEqual(str(requests[0].url), "http://open-notebook.local/api/notebooks")
+        self.assertEqual(
+            str(requests[0].url), "http://open-notebook.local/api/notebooks"
+        )
         self.assertEqual(requests[0].headers["authorization"], "Bearer secret")
 
     def test_creates_notebook(self):

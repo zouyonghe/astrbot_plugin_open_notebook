@@ -41,7 +41,10 @@ class SessionStoreTest(unittest.TestCase):
 
             self.assertIsNone(store.get("missing"))
             store.set("session-1", "notebook:abc", "Research")
-            self.assertEqual(json.loads(store_path.read_text(encoding="utf-8"))["session-1"]["id"], "notebook:abc")
+            self.assertEqual(
+                json.loads(store_path.read_text(encoding="utf-8"))["session-1"]["id"],
+                "notebook:abc",
+            )
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@
 ## 功能
 
 - 在聊天中管理 Open Notebook notebooks。
-- 将聊天上传的文件加入当前 notebook。
+- 将聊天上传或引用的文件加入 notebook。
+- 自动选择唯一 notebook；没有 notebook 时可自动创建。
 - 基于当前 notebook 提问。
 - 提供同等 LLM 工具，方便 Agent 自动调用。
 - 支持自定义 Open Notebook API 地址和密码。
@@ -37,7 +38,10 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 /on upload
 /on ask <问题>
 /on delete <notebook名称或ID>
+/on help
 ```
+
+`/on use` 和 `/on delete` 支持列表序号，例如 `/on use 1`。`/on upload` 会读取当前消息或引用消息中的文件：如果没有 notebook，会按文件名自动创建；如果只有一个 notebook，会直接使用；如果有多个 notebook 且当前会话未选择，会提示先切换。
 
 典型流程：
 
@@ -70,6 +74,8 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 - `open_notebook_ask`
 - `open_notebook_delete_notebook`
 
+`open_notebook_upload_file` 支持可选 `notebook` 参数。Agent 可以传入 notebook ID、名称、序号，或一个新名称；如果目标不存在，插件会自动创建后上传。未传入时会优先使用当前会话 notebook，其次自动使用唯一 notebook；多个 notebook 时会使用列表中的第一个 notebook，Agent 也可以先调用列表工具后自行选择目标。
+
 如果 `admin_only` 开启，LLM 工具和聊天命令都会要求调用者是 AstrBot 管理员。
 
 ## 依赖
@@ -85,7 +91,8 @@ This plugin connects [Open Notebook](https://github.com/lfnovo/open-notebook) to
 ## Features
 
 - Manage Open Notebook notebooks from chat.
-- Upload chat files into the current notebook.
+- Upload current or quoted chat files into notebooks.
+- Automatically use the only notebook, or create one when none exists.
 - Ask questions against the current notebook.
 - Expose equivalent LLM tools for Agent automation.
 - Configure a custom Open Notebook API base URL and optional password.
@@ -115,7 +122,10 @@ The command prefix is `/on`.
 /on upload
 /on ask <question>
 /on delete <notebook name or id>
+/on help
 ```
+
+`/on use` and `/on delete` accept list indexes, for example `/on use 1`. `/on upload` reads the file attached to the current message or quoted message. If no notebook exists, it creates one from the file name. If exactly one notebook exists, it uses it automatically. If multiple notebooks exist and the chat session has no current notebook, it asks you to switch first.
 
 Example flow:
 
@@ -136,5 +146,7 @@ The plugin registers these LLM tools:
 - `open_notebook_upload_file`
 - `open_notebook_ask`
 - `open_notebook_delete_notebook`
+
+`open_notebook_upload_file` accepts an optional `notebook` argument. Agents can pass a notebook ID, name, list index, or a new name; missing targets are created automatically before upload. Without a target, the tool uses the current session notebook, then the only existing notebook, and finally the first notebook when multiple exist.
 
 When `admin_only` is enabled, both commands and LLM tools require an AstrBot admin caller.

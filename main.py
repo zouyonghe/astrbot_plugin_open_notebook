@@ -145,14 +145,22 @@ class OpenNotebookPlugin(Star):
             f"文档已提交到 notebook：{current['name']}\nSource ID：{source.get('id', '')}"
         )
 
+    @on.command("providers")
+    async def list_astrbot_providers(self, event: AstrMessageEvent):
+        """列出可同步的 AstrBot chat providers。"""
+        if denied := self._require_permission(event):
+            yield event.plain_result(denied)
+            return
+        yield event.plain_result(self._format_astrbot_providers())
+
     @on.command("sync-model")
-    async def sync_model(self, event: AstrMessageEvent):
-        """把当前 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。"""
+    async def sync_model(self, event: AstrMessageEvent, provider: GreedyStr = ""):
+        """把指定 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。"""
         if denied := self._require_permission(event):
             yield event.plain_result(denied)
             return
         try:
-            result = await self._sync_astrbot_chat_model(event)
+            result = await self._sync_astrbot_chat_model(event, str(provider or ""))
         except Exception as exc:
             logger.error(f"Open Notebook model sync failed: {exc}")
             yield event.plain_result(f"同步模型失败：{exc}")
@@ -292,13 +300,6 @@ class OpenNotebookPlugin(Star):
             self.session_store.clear(self._session_id(event))
         return f"已删除 notebook：{resolved.get('name', '')}"
 
-    @filter.llm_tool(name="open_notebook_sync_astrbot_model")
-    async def tool_sync_astrbot_model(self, event: AstrMessageEvent) -> str:
-        """把当前 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。"""
-        if denied := self._require_permission(event):
-            return denied
-        return await self._sync_astrbot_chat_model(event)
-
     def _client(self) -> OpenNotebookClient:
         return OpenNotebookClient(
             str(self.config.get("base_url", "http://localhost:5055")),
@@ -433,8 +434,12 @@ class OpenNotebookPlugin(Star):
             logger.error(f"Open Notebook ask failed: {exc}")
             return f"查询失败：{exc}"
 
-    async def _sync_astrbot_chat_model(self, event: AstrMessageEvent) -> str:
-        provider = self._selected_astrbot_provider(event)
+    async def _sync_astrbot_chat_model(
+        self,
+        event: AstrMessageEvent,
+        provider_ref: str = "",
+    ) -> str:
+        provider = self._selected_astrbot_provider(event, provider_ref)
         if provider is None:
             raise ValueError("没有找到可同步的 AstrBot chat provider。")
 
@@ -462,13 +467,32 @@ class OpenNotebookPlugin(Star):
             f"{model.get('name', model_name)} ({model.get('id', '')})"
         )
 
-    def _selected_astrbot_provider(self, event: AstrMessageEvent) -> Any | None:
+    def _selected_astrbot_provider(
+        self,
+        event: AstrMessageEvent,
+        provider_ref: str = "",
+    ) -> Any | None:
+        ref = provider_ref.strip()
+        if ref:
+            providers = self._astrbot_providers()
+            if ref.isdigit():
+                index = int(ref)
+                if 1 <= index <= len(providers):
+                    return providers[index - 1]
+            return self.context.get_provider_by_id(ref)
+
         provider_id = str(self.config.get("astrbot_provider_id", "") or "").strip()
         if provider_id:
             return self.context.get_provider_by_id(provider_id)
         return self.context.get_using_provider(
             getattr(event, "unified_msg_origin", None)
         )
+
+    def _astrbot_providers(self) -> list[Any]:
+        if hasattr(self.context, "get_all_providers"):
+            return list(self.context.get_all_providers() or [])
+        provider = self.context.get_using_provider(None)
+        return [provider] if provider else []
 
     @staticmethod
     def _provider_model_name(provider: Any, provider_config: dict[str, Any]) -> str:
@@ -540,6 +564,20 @@ class OpenNotebookPlugin(Star):
             lines.append(f"{index}. {name} ({notebook_id})")
         return "\n".join(lines)
 
+    def _format_astrbot_providers(self) -> str:
+        providers = self._astrbot_providers()
+        if not providers:
+            return "当前没有可同步的 AstrBot chat provider。"
+        lines = ["可同步的 AstrBot chat providers："]
+        for index, provider in enumerate(providers, start=1):
+            provider_config = getattr(provider, "provider_config", {}) or {}
+            provider_id = provider_config.get("id", "default")
+            model_name = self._provider_model_name(provider, provider_config)
+            provider_type = provider_config.get("type", "")
+            lines.append(f"{index}. {provider_id} - {model_name} ({provider_type})")
+        lines.append("使用 /on sync-model <序号或ID> 同步，例如 /on sync-model 1。")
+        return "\n".join(lines)
+
     @staticmethod
     def _help_text() -> str:
         return "\n".join(
@@ -550,7 +588,8 @@ class OpenNotebookPlugin(Star):
                 "/on use <序号、名称或ID> - 切换 notebook，例如 /on use 1",
                 "/on current - 查看当前 notebook",
                 "/on upload - 上传当前或引用消息中的文件；0 个 notebook 会自动创建，1 个会自动使用",
-                "/on sync-model - 同步 AstrBot 当前 chat 模型为 Open Notebook 默认 chat 模型",
+                "/on providers - 列出可同步的 AstrBot chat 模型",
+                "/on sync-model <序号或ID> - 同步指定 AstrBot chat 模型，例如 /on sync-model 1",
                 "/on ask <问题> - 查询当前 notebook",
                 "/on delete <序号、名称或ID> - 删除 notebook",
                 "/on help - 显示本帮助",

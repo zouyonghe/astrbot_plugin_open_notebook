@@ -157,28 +157,46 @@ def make_plugin(client):
 
 
 class FakeProvider:
-    provider_config = {
-        "id": "default",
-        "type": "openai_chat_completion",
-        "api_base": "http://localhost:8000/v1",
-        "key": ["secret"],
-    }
+    def __init__(
+        self,
+        provider_id="default",
+        model_name="gpt-5.5",
+        api_key="secret",
+    ):
+        self.model_name = model_name
+        self.api_key = api_key
+        self.provider_config = {
+            "id": provider_id,
+            "type": "openai_chat_completion",
+            "api_base": "http://localhost:8000/v1",
+            "key": [api_key],
+        }
 
     def get_model(self):
-        return "gpt-5.5"
+        return self.model_name
 
     def get_current_key(self):
-        return "secret"
+        return self.api_key
 
 
 class FakeContext:
+    def __init__(self):
+        self.providers = [
+            FakeProvider("default", "gpt-5.5", "secret"),
+            FakeProvider("backup", "gpt-4.1", "backup-secret"),
+        ]
+
     def get_provider_by_id(self, provider_id):
-        if provider_id == "default":
-            return FakeProvider()
+        for provider in self.providers:
+            if provider.provider_config["id"] == provider_id:
+                return provider
         return None
 
     def get_using_provider(self, umo=None):
-        return FakeProvider()
+        return self.providers[0]
+
+    def get_all_providers(self):
+        return self.providers
 
 
 class PluginBehaviorTest(unittest.TestCase):
@@ -224,6 +242,7 @@ class PluginBehaviorTest(unittest.TestCase):
         self.assertIn("/on upload", help_text)
         self.assertIn("/on delete", help_text)
         self.assertIn("/on use 1", help_text)
+        self.assertIn("/on providers", help_text)
 
     def test_tool_upload_creates_requested_notebook_when_missing(self):
         client = FakeClient([])
@@ -260,17 +279,28 @@ class PluginBehaviorTest(unittest.TestCase):
         self.assertEqual(client.synced[0]["api_key"], "secret")
         self.assertIn("gpt-5.5", result)
 
-    def test_tool_sync_model_triggers_astrbot_provider_sync(self):
+    def test_sync_model_uses_provider_list_index(self):
         client = FakeClient([])
         plugin = make_plugin(client)
         plugin.context = FakeContext()
         event = FakeEvent()
         event.unified_msg_origin = "test:session"
 
-        result = asyncio.run(plugin.tool_sync_astrbot_model(event))
+        result = asyncio.run(plugin._sync_astrbot_chat_model(event, "2"))
 
-        self.assertEqual(client.synced[0]["model_name"], "gpt-5.5")
-        self.assertIn("gpt-5.5", result)
+        self.assertEqual(client.synced[0]["model_name"], "gpt-4.1")
+        self.assertEqual(client.synced[0]["api_key"], "backup-secret")
+        self.assertIn("gpt-4.1", result)
+
+    def test_format_astrbot_providers_lists_sync_indexes(self):
+        plugin = make_plugin(FakeClient([]))
+        plugin.context = FakeContext()
+
+        result = plugin._format_astrbot_providers()
+
+        self.assertIn("1. default", result)
+        self.assertIn("2. backup", result)
+        self.assertIn("gpt-4.1", result)
 
 
 async def _collect(generator):

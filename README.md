@@ -39,7 +39,8 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 /on use <notebook名称或ID>
 /on current
 /on upload
-/on sync-model
+/on providers
+/on sync-model <provider序号或ID>
 /on ask <问题>
 /on delete <notebook名称或ID>
 /on help
@@ -47,7 +48,7 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 
 `/on use` 和 `/on delete` 支持列表序号，例如 `/on use 1`。`/on upload` 会读取当前消息或引用消息中的文件：如果没有 notebook，会按文件名自动创建；如果只有一个 notebook，会直接使用；如果有多个 notebook 且当前会话未选择，会提示先切换。
 
-如果 Open Notebook 没有默认 chat 模型，可以使用 `/on sync-model`。插件会读取配置中的 `astrbot_provider_id`，或当前会话正在使用的 AstrBot chat 模型，把它同步为 Open Notebook 的默认 chat 模型。同步会创建或更新 Open Notebook credential、model，并设置 `default_chat_model`。
+如果 Open Notebook 没有默认 chat 模型，可以先用 `/on providers` 查看 AstrBot chat 模型列表，再用 `/on sync-model <序号或ID>` 同步指定模型，例如 `/on sync-model 1`。插件会创建或更新 Open Notebook credential、model，并设置 `default_chat_model`。
 
 典型流程：
 
@@ -79,11 +80,8 @@ Open Notebook REST API 默认运行在 `http://localhost:5055`。如果 AstrBot 
 - `open_notebook_upload_file`
 - `open_notebook_ask`
 - `open_notebook_delete_notebook`
-- `open_notebook_sync_astrbot_model`
 
 `open_notebook_upload_file` 支持可选 `notebook` 参数。Agent 可以传入 notebook ID、名称、序号，或一个新名称；如果目标不存在，插件会自动创建后上传。未传入时会优先使用当前会话 notebook，其次自动使用唯一 notebook；多个 notebook 时会使用列表中的第一个 notebook，Agent 也可以先调用列表工具后自行选择目标。
-
-`open_notebook_sync_astrbot_model` 可以让 Agent 主动把当前 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。
 
 如果 `admin_only` 开启，LLM 工具和聊天命令都会要求调用者是 AstrBot 管理员。
 
@@ -132,7 +130,8 @@ The command prefix is `/on`.
 /on use <notebook name or id>
 /on current
 /on upload
-/on sync-model
+/on providers
+/on sync-model <provider index or id>
 /on ask <question>
 /on delete <notebook name or id>
 /on help
@@ -140,7 +139,7 @@ The command prefix is `/on`.
 
 `/on use` and `/on delete` accept list indexes, for example `/on use 1`. `/on upload` reads the file attached to the current message or quoted message. If no notebook exists, it creates one from the file name. If exactly one notebook exists, it uses it automatically. If multiple notebooks exist and the chat session has no current notebook, it asks you to switch first.
 
-If Open Notebook has no default chat model, run `/on sync-model`. The plugin reads `astrbot_provider_id`, or the current AstrBot chat provider, and syncs it into Open Notebook as the default chat model by creating or updating the credential, model, and `default_chat_model` setting.
+If Open Notebook has no default chat model, run `/on providers` first, then sync a selected AstrBot chat provider with `/on sync-model <index or id>`, for example `/on sync-model 1`. The plugin creates or updates the Open Notebook credential, model, and `default_chat_model` setting.
 
 Example flow:
 
@@ -161,10 +160,7 @@ The plugin registers these LLM tools:
 - `open_notebook_upload_file`
 - `open_notebook_ask`
 - `open_notebook_delete_notebook`
-- `open_notebook_sync_astrbot_model`
 
 `open_notebook_upload_file` accepts an optional `notebook` argument. Agents can pass a notebook ID, name, list index, or a new name; missing targets are created automatically before upload. Without a target, the tool uses the current session notebook, then the only existing notebook, and finally the first notebook when multiple exist.
-
-`open_notebook_sync_astrbot_model` lets the Agent sync the current AstrBot chat model into Open Notebook as the default chat model.
 
 When `admin_only` is enabled, both commands and LLM tools require an AstrBot admin caller.

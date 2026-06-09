@@ -92,6 +92,7 @@ class FakeClient:
         self.notebooks = notebooks
         self.created = []
         self.uploads = []
+        self.synced = []
 
     async def list_notebooks(self):
         return list(self.notebooks)
@@ -105,6 +106,14 @@ class FakeClient:
     async def upload_file(self, notebook_id, file_path, **kwargs):
         self.uploads.append((notebook_id, Path(file_path), kwargs))
         return {"id": "source:uploaded"}
+
+    async def sync_model(self, **kwargs):
+        self.synced.append(kwargs)
+        return {
+            "credential": {"id": "cred:1"},
+            "model": {"id": "model:1", "name": kwargs["model_name"]},
+            "defaults": {"default_chat_model": "model:1"},
+        }
 
 
 class FakeSessionStore:
@@ -145,6 +154,31 @@ def make_plugin(client):
     plugin.session_store = FakeSessionStore()
     plugin._client = lambda: client
     return plugin
+
+
+class FakeProvider:
+    provider_config = {
+        "id": "default",
+        "type": "openai_chat_completion",
+        "api_base": "http://localhost:8000/v1",
+        "key": ["secret"],
+    }
+
+    def get_model(self):
+        return "gpt-5.5"
+
+    def get_current_key(self):
+        return "secret"
+
+
+class FakeContext:
+    def get_provider_by_id(self, provider_id):
+        if provider_id == "default":
+            return FakeProvider()
+        return None
+
+    def get_using_provider(self, umo=None):
+        return FakeProvider()
 
 
 class PluginBehaviorTest(unittest.TestCase):
@@ -210,6 +244,33 @@ class PluginBehaviorTest(unittest.TestCase):
         self.assertEqual(client.created[0][0], "银河铁道资料")
         self.assertEqual(client.uploads[0][0], "notebook:1")
         self.assertIn("银河铁道资料", result)
+
+    def test_sync_model_uses_selected_astrbot_provider(self):
+        client = FakeClient([])
+        plugin = make_plugin(client)
+        plugin.context = FakeContext()
+        plugin.config["astrbot_provider_id"] = "default"
+        event = FakeEvent()
+        event.unified_msg_origin = "test:session"
+
+        result = asyncio.run(plugin._sync_astrbot_chat_model(event))
+
+        self.assertEqual(client.synced[0]["provider"], "openai_compatible")
+        self.assertEqual(client.synced[0]["model_name"], "gpt-5.5")
+        self.assertEqual(client.synced[0]["api_key"], "secret")
+        self.assertIn("gpt-5.5", result)
+
+    def test_tool_sync_model_triggers_astrbot_provider_sync(self):
+        client = FakeClient([])
+        plugin = make_plugin(client)
+        plugin.context = FakeContext()
+        event = FakeEvent()
+        event.unified_msg_origin = "test:session"
+
+        result = asyncio.run(plugin.tool_sync_astrbot_model(event))
+
+        self.assertEqual(client.synced[0]["model_name"], "gpt-5.5")
+        self.assertIn("gpt-5.5", result)
 
 
 async def _collect(generator):

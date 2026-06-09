@@ -23,6 +23,7 @@ def on():
 class OpenNotebookPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self.context = context
         self.config = config
         data_dir = Path(get_astrbot_plugin_data_path()) / PLUGIN_NAME
         self.session_store = SessionStore(data_dir / "sessions.json")
@@ -143,6 +144,20 @@ class OpenNotebookPlugin(Star):
         yield event.plain_result(
             f"文档已提交到 notebook：{current['name']}\nSource ID：{source.get('id', '')}"
         )
+
+    @on.command("sync-model")
+    async def sync_model(self, event: AstrMessageEvent):
+        """把当前 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。"""
+        if denied := self._require_permission(event):
+            yield event.plain_result(denied)
+            return
+        try:
+            result = await self._sync_astrbot_chat_model(event)
+        except Exception as exc:
+            logger.error(f"Open Notebook model sync failed: {exc}")
+            yield event.plain_result(f"同步模型失败：{exc}")
+            return
+        yield event.plain_result(result)
 
     @on.command("ask")
     async def ask_notebook(self, event: AstrMessageEvent, question: GreedyStr):
@@ -277,6 +292,13 @@ class OpenNotebookPlugin(Star):
             self.session_store.clear(self._session_id(event))
         return f"已删除 notebook：{resolved.get('name', '')}"
 
+    @filter.llm_tool(name="open_notebook_sync_astrbot_model")
+    async def tool_sync_astrbot_model(self, event: AstrMessageEvent) -> str:
+        """把当前 AstrBot chat 模型同步为 Open Notebook 默认 chat 模型。"""
+        if denied := self._require_permission(event):
+            return denied
+        return await self._sync_astrbot_chat_model(event)
+
     def _client(self) -> OpenNotebookClient:
         return OpenNotebookClient(
             str(self.config.get("base_url", "http://localhost:5055")),
@@ -404,10 +426,108 @@ class OpenNotebookPlugin(Star):
         if not question.strip():
             return "请提供要询问的问题。"
         try:
+            if bool(self.config.get("auto_sync_astrbot_chat_model", False)):
+                await self._sync_astrbot_chat_model(event)
             return await self._client().ask(current["id"], question.strip())
         except Exception as exc:
             logger.error(f"Open Notebook ask failed: {exc}")
             return f"查询失败：{exc}"
+
+    async def _sync_astrbot_chat_model(self, event: AstrMessageEvent) -> str:
+        provider = self._selected_astrbot_provider(event)
+        if provider is None:
+            raise ValueError("没有找到可同步的 AstrBot chat provider。")
+
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        provider_id = str(provider_config.get("id", "default") or "default")
+        model_name = self._provider_model_name(provider, provider_config)
+        api_key = self._provider_api_key(provider, provider_config)
+        base_url = self._provider_base_url(provider_config)
+        open_notebook_provider = str(
+            self.config.get("open_notebook_model_provider", "")
+            or self._infer_open_notebook_provider(provider_config, base_url)
+        )
+
+        result = await self._client().sync_model(
+            credential_name=f"AstrBot {provider_id}",
+            provider=open_notebook_provider,
+            model_name=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            model_type="language",
+        )
+        model = result.get("model", {})
+        return (
+            "已同步 AstrBot 模型到 Open Notebook 默认 chat 模型："
+            f"{model.get('name', model_name)} ({model.get('id', '')})"
+        )
+
+    def _selected_astrbot_provider(self, event: AstrMessageEvent) -> Any | None:
+        provider_id = str(self.config.get("astrbot_provider_id", "") or "").strip()
+        if provider_id:
+            return self.context.get_provider_by_id(provider_id)
+        return self.context.get_using_provider(
+            getattr(event, "unified_msg_origin", None)
+        )
+
+    @staticmethod
+    def _provider_model_name(provider: Any, provider_config: dict[str, Any]) -> str:
+        model_name = ""
+        if hasattr(provider, "get_model"):
+            model_name = str(provider.get_model() or "")
+        model_name = model_name or str(
+            provider_config.get("model") or provider_config.get("model_name") or ""
+        )
+        if not model_name:
+            raise ValueError("AstrBot provider 没有可同步的模型名称。")
+        return model_name
+
+    @staticmethod
+    def _provider_api_key(provider: Any, provider_config: dict[str, Any]) -> str:
+        if hasattr(provider, "get_current_key"):
+            key = provider.get_current_key()
+            if key:
+                return str(key)
+        keys = provider_config.get("key", [])
+        if isinstance(keys, list) and keys:
+            return str(keys[0] or "")
+        if isinstance(keys, str):
+            return keys
+        return str(provider_config.get("api_key", "") or "")
+
+    @staticmethod
+    def _provider_base_url(provider_config: dict[str, Any]) -> str | None:
+        value = (
+            provider_config.get("api_base")
+            or provider_config.get("base_url")
+            or provider_config.get("api_base_url")
+        )
+        return str(value).strip() if value else None
+
+    @staticmethod
+    def _infer_open_notebook_provider(
+        provider_config: dict[str, Any],
+        base_url: str | None,
+    ) -> str:
+        provider_type = str(provider_config.get("type", ""))
+        url = (base_url or "").lower()
+        if "openrouter" in provider_type or "openrouter" in url:
+            return "openrouter"
+        if "anthropic" in provider_type:
+            return "anthropic"
+        if "gemini" in provider_type or "googlegenai" in provider_type:
+            return "google"
+        if "groq" in provider_type:
+            return "groq"
+        if "xai" in provider_type:
+            return "xai"
+        if "dashscope" in provider_type:
+            return "dashscope"
+        if "deepseek" in url:
+            return "deepseek"
+        if "api.openai.com" in url and provider_type == "openai_chat_completion":
+            return "openai"
+        return "openai_compatible"
 
     @staticmethod
     def _format_notebooks(notebooks: list[dict[str, Any]]) -> str:
@@ -430,6 +550,7 @@ class OpenNotebookPlugin(Star):
                 "/on use <序号、名称或ID> - 切换 notebook，例如 /on use 1",
                 "/on current - 查看当前 notebook",
                 "/on upload - 上传当前或引用消息中的文件；0 个 notebook 会自动创建，1 个会自动使用",
+                "/on sync-model - 同步 AstrBot 当前 chat 模型为 Open Notebook 默认 chat 模型",
                 "/on ask <问题> - 查询当前 notebook",
                 "/on delete <序号、名称或ID> - 删除 notebook",
                 "/on help - 显示本帮助",

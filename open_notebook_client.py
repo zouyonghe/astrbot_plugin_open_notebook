@@ -36,6 +36,136 @@ class OpenNotebookClient:
     async def delete_notebook(self, notebook_id: str) -> dict[str, Any]:
         return await self._request_json("DELETE", f"/notebooks/{notebook_id}")
 
+    async def list_credentials(
+        self, provider: str | None = None
+    ) -> list[dict[str, Any]]:
+        params = {"provider": provider} if provider else None
+        data = await self._request_json("GET", "/credentials", params=params)
+        if isinstance(data, list):
+            return data
+        raise ValueError("Open Notebook returned an invalid credentials response.")
+
+    async def create_credential(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._request_json("POST", "/credentials", json=payload)
+
+    async def update_credential(
+        self,
+        credential_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        return await self._request_json(
+            "PUT",
+            f"/credentials/{credential_id}",
+            json=payload,
+        )
+
+    async def list_models(self, model_type: str | None = None) -> list[dict[str, Any]]:
+        params = {"type": model_type} if model_type else None
+        data = await self._request_json("GET", "/models", params=params)
+        if isinstance(data, list):
+            return data
+        raise ValueError("Open Notebook returned an invalid models response.")
+
+    async def create_model(
+        self,
+        name: str,
+        provider: str,
+        model_type: str,
+        credential_id: str | None,
+    ) -> dict[str, Any]:
+        return await self._request_json(
+            "POST",
+            "/models",
+            json={
+                "name": name,
+                "provider": provider,
+                "type": model_type,
+                "credential": credential_id,
+            },
+        )
+
+    async def get_default_models(self) -> dict[str, Any]:
+        data = await self._request_json("GET", "/models/defaults")
+        if isinstance(data, dict):
+            return data
+        raise ValueError("Open Notebook returned an invalid default models response.")
+
+    async def update_default_models(self, defaults: dict[str, Any]) -> dict[str, Any]:
+        return await self._request_json("PUT", "/models/defaults", json=defaults)
+
+    async def sync_model(
+        self,
+        *,
+        credential_name: str,
+        provider: str,
+        model_name: str,
+        api_key: str,
+        base_url: str | None,
+        model_type: str = "language",
+    ) -> dict[str, Any]:
+        credential = await self._sync_credential(
+            credential_name=credential_name,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            model_type=model_type,
+        )
+        model = await self._sync_model_record(
+            model_name=model_name,
+            provider=provider,
+            model_type=model_type,
+            credential_id=str(credential.get("id", "")) or None,
+        )
+        defaults = await self.get_default_models()
+        defaults["default_chat_model"] = model.get("id")
+        defaults = await self.update_default_models(defaults)
+        return {"credential": credential, "model": model, "defaults": defaults}
+
+    async def _sync_credential(
+        self,
+        *,
+        credential_name: str,
+        provider: str,
+        api_key: str,
+        base_url: str | None,
+        model_type: str,
+    ) -> dict[str, Any]:
+        payload = {
+            "name": credential_name,
+            "provider": provider,
+            "modalities": [model_type],
+            "api_key": api_key or None,
+            "base_url": base_url or None,
+        }
+        credentials = await self.list_credentials(provider)
+        for credential in credentials:
+            if credential.get("name") == credential_name:
+                update_payload = {
+                    key: value for key, value in payload.items() if key != "provider"
+                }
+                return await self.update_credential(
+                    str(credential["id"]), update_payload
+                )
+        return await self.create_credential(payload)
+
+    async def _sync_model_record(
+        self,
+        *,
+        model_name: str,
+        provider: str,
+        model_type: str,
+        credential_id: str | None,
+    ) -> dict[str, Any]:
+        models = await self.list_models(model_type)
+        for model in models:
+            if (
+                model.get("name") == model_name
+                and model.get("provider") == provider
+                and model.get("type") == model_type
+            ):
+                return model
+        return await self.create_model(model_name, provider, model_type, credential_id)
+
     async def upload_file(
         self,
         notebook_id: str,

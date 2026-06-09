@@ -27,5 +27,23 @@
     "type": "bool",
     "hint": "建议开启，避免大文件处理阻塞聊天响应。",
     "default": true
+  },
+  "astrbot_provider_id": {
+    "description": "要同步到 Open Notebook 的 AstrBot 模型 ID",
+    "type": "string",
+    "hint": "留空时使用当前会话正在使用的 AstrBot chat 模型；也可以填写 AstrBot 模型配置里的 provider id。",
+    "default": ""
+  },
+  "open_notebook_model_provider": {
+    "description": "Open Notebook 模型提供商覆盖",
+    "type": "string",
+    "hint": "留空自动推断。常用值：openai_compatible、openai、openrouter、anthropic、google、groq、xai、deepseek。",
+    "default": ""
+  },
+  "auto_sync_astrbot_chat_model": {
+    "description": "查询前自动同步 AstrBot chat 模型",
+    "type": "bool",
+    "hint": "开启后，每次 /on ask 或 LLM 查询前会把选定 AstrBot 模型同步为 Open Notebook 默认 chat 模型。会把该模型的 API Key 写入 Open Notebook。",
+    "default": false
   }
 }
